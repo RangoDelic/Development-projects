@@ -1,0 +1,196 @@
+---
+title: "DataProg Project"
+warning: FALSE
+echo: TRUE
+author: "Goran Delic 89201217"
+format:
+  html:
+    embed-resources: true
+editor: visual
+---
+
+# Introduction
+
+**SARS-CoV-2**, the virus responsible for **COVID-19**, has shown significant genetic variability since its emergence. Understanding how these variations affect viral properties like *transmissibility*, *immune evasion*, and *vaccine efficacy* is crucial.\
+In this project, we analyze the variations in the protein sequences of **SARS-CoV-2** across different gene positions(locations) and submission dates in order to understand how the research improved from the start of the pandemic and isolating possible breakthroughs in research that led to the cure for the virus.
+
+# Presentation of the Data
+
+```{r}
+library(tidyverse)
+library(readr)
+
+# Importing the dataset
+covidData <- read_csv("~/BF1 - data programming/Project/covid_data.csv")
+
+head(covidData)
+
+# Structure
+str(covidData)
+
+```
+
+### The dataset contains the following columns: 
+
+-   `Location`: The geographical location of the submission.\
+-   `Protein Name`: The name of the protein.\
+-   `Protein Sequence`: The amino acid sequence of the protein.\
+-   `Nuccore ids`: IDs corresponding to the nucleotide sequences.\
+-   `GenBank URL`: URL to the GenBank entry.\
+-   `Submission Date`: The date of the submission.\
+-   `Submission Notes`: Additional notes about the submission.\
+-   `Source`: Source of the sequence data.\
+
+# Aggregation of data
+
+### Count of each protein
+
+```{r}
+protCount <- covidData |>
+  count(`Protein Name`) |>
+  arrange(desc(n))
+
+print(protCount)
+```
+
+### Average length of protein sequences
+
+```{r}
+avgProtLength <- covidData |>
+  mutate(ProteinLength = str_length(`Protein Sequence`)) |>
+  summarise(AverageLength = mean(ProteinLength, na.rm = TRUE)) |>
+  as.numeric()
+
+print(avgProtLength)
+
+```
+
+### Submission dates frequency
+
+```{r}
+#Convert the Submission Date column to Date format using lubridate
+covidData <- covidData |>
+  mutate(`Submission Date` = dmy(`Submission Date`))
+
+subDates <- covidData |>
+  count(`Submission Date`) |>
+  arrange(desc(n))
+
+print(subDates)
+```
+
+### Number of unique Nuccore ids per protein name
+
+```{r}
+uniqueNuccId <- covidData |>
+  group_by(`Protein Name`) |>
+  summarise(uniqueNuccId = n_distinct(`Nuccore ids`)) |>
+  arrange(desc(uniqueNuccId))
+
+print(uniqueNuccId)
+```
+
+# Exploratory data analysis
+
+### Bar plot for the count of each protein
+
+```{r}
+library(ggplot2)
+
+ggplot(protCount, aes(x = reorder(`Protein Name`, -n), y = n)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(title = "Count of Each Protein", x = "Protein Name", y = "Count") +
+  theme_minimal()
+```
+
+#### According to this plot, we can see that the most submitted sample is the ***ORF1ab*** protein.
+
+### Histogram of the number of submissions over time
+
+```{r}
+ggplot(subDates, aes(x = `Submission Date`, y = n)) +
+  geom_col(fill = "steelblue") +
+  scale_x_date(date_labels = "%b-%Y", date_breaks = "1 month") +
+  labs(title = "Number of Submissions Over Time", x = "Submission Date", y = "Number of Submissions") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+#### This histogram clearly shows an absolutely astonishing jump in number of submissions of COVID-19 protein samples in september of 2020, most likely indicating a break-through in the research!
+
+#### Based on this new knowledge I decided to figure out which protein was the most submitted in september 2020 to realize which protein was part of the breakthrough. Is it the previously mentioned ***ORF1ab***?
+
+```{r}
+# Filter the data for September 2020 submissions
+septSubs <- covidData |>
+  filter(`Submission Date` >= as.Date("2020-09-01") & 
+         `Submission Date` <= as.Date("2020-09-30"))
+
+# Count the frequency of each protein
+protFreq <- table(septSubs$`Protein Name`)
+protFreqdf <- as.data.frame(protFreq)
+names(protFreqdf) <- c("Protein Name", "Frequency")
+
+# Sort the data frame by frequency in descending order
+protFreqdf <- protFreqdf[order(-protFreqdf$Frequency), ]
+
+# Plot
+ggplot(protFreqdf, aes(x = reorder(`Protein Name`, Frequency), y = Frequency)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(title = "Frequency of Submitted Proteins in September 2020",
+       x = "Protein Name",
+       y = "Frequency") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+#### It looks like the protein ***ORF1ab*** was the most submitted in september 2020 which indicates that the research and the possible breakthrough were revolving around this protein.
+
+### Making a genemap using gggenes that shows how all the proteins were positioned in the genome (Hypothetical).
+
+```{r}
+# Plot using gggenes
+library(gggenes)
+
+# Create start and end positions for the protein sequences
+covidData <- covidData |>
+  mutate(start = as.numeric(str_extract(`Location`, "^[0-9]+")),
+         end = as.numeric(str_extract(`Location`, "[0-9]+$")),
+         strand = "+",  # Assume all sequences are on the positive strand
+         molecule = "SARS-CoV-2")
+
+# Sample data for visualization (for better visibility)
+sampleData <- covidData |>
+  sample_n(10)
+
+# Plot using gggenes
+ggplot(sampleData, aes(xmin = start, xmax = end, y = molecule, fill = `Protein Name`, label = `Protein Name`)) +
+  geom_gene_arrow() +
+  theme_genes() +
+  labs(title = "Visualization of Protein Sequences in SARS-CoV-2 Genome", x = "Genomic Position", y = "Molecule")
+```
+
+### Dot plot for the number of unique Nuccore ids per protein name
+
+```{r}
+ggplot(uniqueNuccId, aes(x = reorder(`Protein Name`, -uniqueNuccId), y = uniqueNuccId)) +
+  geom_point(size = 3, color = "blue") +
+  coord_flip() +
+  labs(title = "Number of Unique Nuccore ids per Protein Name",
+       x = "Protein Name",
+       y = "Number of Unique Nuccore ids") +
+  theme_minimal()
+```
+
+#### From this dot plot, we can visualise to which proteins, besides ***ORF1ab***, researchers also gave attention during the pandemic.
+
+# Interpretation / Conclusion
+
+#### Shortly after pandemic started in early 2020, we can see a small number of samples submitted, which is understandable considering the conditions for work during those times and the speed at which the virus was spreading. This research "draught" continued through the middle of the year until september 2020 when the possible breakthrough was made targeting the ***ORF1ab*** protein. These findings might have been crucial for the later discovery of the ***SPIKE*** protein, which was the base for creating the first vaccine.
+
+# References
+
+[SARS-Cov-2 Genetics Dataset](https://www.kaggle.com/datasets/rtwillett/sarscov2-genetics/data?select=covid_cds.csv) ***(Kaggle)***
+
+[More information about the genome and proteins](https://www.ncbi.nlm.nih.gov/labs/virus/vssi/#/virus?SeqType_s=Nucleotide&VirusLineage_ss=taxid:2697049) ***(NCBI)***
